@@ -1,0 +1,4 @@
+interface:
+  display_name: "Narrated Story Video"
+  short_description: "Build narrated videos from scripts and prompts."
+  default_prompt: "Use $narrated-story-video to turn a storyboard manifest into images, voice, subtitles, and a finished video."
