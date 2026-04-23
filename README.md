@@ -1,18 +1,19 @@
 # codex-skill
 
-用于归档和管理用户级 Codex Skills 的仓库。
+Repository for tracking reusable Codex skills.
 
-## 当前收录
+## Current skills
 
+- `imagegen`
 - `responses-image-endpoint`
 - `web-access`
 
-## 目录约定
+## Layout
 
-- `skills/`：实际 skill 内容
+- `skills/`: skill folders and bundled resources
 
-## 说明
+## Notes
 
-- 这里只保存用户自行学习、安装或沉淀下来的 skill
-- 不收录 Codex 内置的 `.system` 和 `codex-primary-runtime` 技能
-- 提交前会尽量排除缓存文件和敏感信息
+- This repo mainly stores reusable local skills and selected customized skills we want to version.
+- It can include a customized copy of a built-in skill when we intentionally extend or maintain it here.
+- Do not commit cache files, generated junk, or secrets.
