@@ -1,0 +1,7 @@
+interface:
+  display_name: "Web Access"
+  short_description: "Adaptive web access and Chrome CDP browsing"
+  default_prompt: "Use $web-access to choose the right web path, and use Chrome CDP when login state or browser interaction is required."
+
+policy:
+  allow_implicit_invocation: true

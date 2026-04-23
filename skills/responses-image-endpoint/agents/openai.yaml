@@ -1,0 +1,4 @@
+interface:
+  display_name: "Responses Image Endpoint"
+  short_description: "Probe and use a custom Responses image API."
+  default_prompt: "Use $responses-image-endpoint to verify my endpoint and generate an image from my prompt."
