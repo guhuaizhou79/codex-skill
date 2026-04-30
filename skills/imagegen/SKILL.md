@@ -27,6 +27,13 @@ Rules:
 - If the user explicitly asks for CLI mode, use the bundled `scripts/image_gen.py` workflow. Do not create one-off SDK runners.
 - Never modify `scripts/image_gen.py`. If something is missing, ask the user before doing anything else.
 
+Environment readiness gate:
+- Before promising execution, confirm which path is actually available in the current session.
+- The built-in path is available only when the `image_gen` tool is exposed in the current tool list. If it is not exposed, do not claim the built-in path can run.
+- The explicit CLI fallback still requires `OPENAI_API_KEY` even when `OPENAI_BASE_URL` is set. A custom base URL does not replace auth.
+- If the user instead has an OpenAI-compatible Responses endpoint plus API key, prefer the `responses-image-endpoint` skill over forcing `scripts/image_gen.py` through an incompatible route.
+- When blocked by missing tool exposure, missing auth, or endpoint incompatibility, report the exact missing prerequisite before asking for more prompt detail.
+
 Built-in save-path policy:
 - In built-in tool mode, Codex saves generated images under `$CODEX_HOME/*` by default.
 - Do not describe or rely on OS temp as the default built-in destination.
@@ -89,33 +96,45 @@ Execution strategy:
 - In the built-in default path, produce many assets or variants by issuing one `image_gen` call per requested asset or variant.
 - In the explicit CLI fallback path, use the CLI `generate-batch` subcommand only when the user explicitly chose CLI mode and needs many prompts/assets.
 
+Sequential pacing for slow generations:
+- Treat each built-in `image_gen` call as a long-running operation. Allow roughly 3 minutes or longer for a normal generation to return before deciding it may be stalled.
+- For multi-asset requests, run exactly one built-in generation at a time. Wait for the image result, then copy or move it into the project when needed, validate it, and only then start the next image.
+- If the user asks for images "one by one", says not to go too fast, or notes that generation takes time, honor that pacing for the whole task without requiring repeated reminders.
+- Do not send a final answer or begin the next prompt while a current generation, save, copy, or validation step is still pending.
+- If the stream or tool disconnects before an image is saved, report the specific failed item and retry that item only when appropriate; do not skip ahead to later images.
+
 Assume the user wants a new image unless they clearly ask to change an existing one.
 
 ## Workflow
 1. Decide the top-level mode: built-in by default, fallback CLI only if explicitly requested.
-2. Decide the intent: `generate` or `edit`.
-3. Decide whether the output is standalone, recurring-character, or sequential-art work.
-4. Decide whether the output is preview-only or meant to be consumed by the current project.
-5. Decide the execution strategy: single asset vs repeated built-in calls vs CLI `generate-batch`.
-6. Collect inputs up front: prompt(s), exact text (verbatim), constraints/avoid list, and any input images.
-7. For every input image, label its role explicitly:
+2. Run an environment readiness check before you promise output:
+   - built-in path: confirm the `image_gen` tool is actually exposed
+   - CLI path: confirm the user explicitly chose it and `OPENAI_API_KEY` is available
+   - custom proxy path: if the user is pointing at a Responses-style endpoint, switch to `responses-image-endpoint` instead of assuming `/v1/images/*` compatibility
+3. Decide the intent: `generate` or `edit`.
+4. Decide whether the output is standalone, recurring-character, or sequential-art work.
+5. Decide whether the output is preview-only or meant to be consumed by the current project.
+6. Decide the execution strategy: single asset vs repeated built-in calls vs CLI `generate-batch`.
+7. Collect inputs up front: prompt(s), exact text (verbatim), constraints/avoid list, and any input images.
+8. For every input image, label its role explicitly:
    - reference image
    - edit target
    - supporting insert/style/compositing input
-8. If the edit target is only on the local filesystem and you are staying on the built-in path, inspect it with `view_image` first so the image is available in conversation context.
-9. If the work is recurring-character or sequential art, load `references/comic-workflow.md` and create a canonical character block or reference sheet before rendering final pages.
-10. If the user asked for a photo, illustration, sprite, product image, banner, comic page, or other explicitly raster-style asset, use `image_gen` rather than substituting SVG/HTML/CSS placeholders. If the request is for an icon, logo, or UI graphic that should match existing repo-native SVG/vector/code assets, prefer editing those directly instead.
-11. Augment the prompt based on specificity:
+9. If the edit target is only on the local filesystem and you are staying on the built-in path, inspect it with `view_image` first so the image is available in conversation context.
+10. If the work is recurring-character or sequential art, load `references/comic-workflow.md` and create a canonical character block or reference sheet before rendering final pages.
+11. If the user asked for a photo, illustration, sprite, product image, banner, comic page, or other explicitly raster-style asset, use `image_gen` rather than substituting SVG/HTML/CSS placeholders. If the request is for an icon, logo, or UI graphic that should match existing repo-native SVG/vector/code assets, prefer editing those directly instead.
+12. Augment the prompt based on specificity:
    - If the user's prompt is already specific and detailed, normalize it into a clear spec without adding creative requirements.
    - If the user's prompt is generic, add tasteful augmentation only when it materially improves output quality.
-12. Use the built-in `image_gen` tool by default.
-13. If the user explicitly chooses the CLI fallback, then and only then use the fallback-only docs for quality, `input_fidelity`, masks, output format, output paths, and network setup.
-14. Inspect outputs and validate: subject, style, composition, text accuracy, and invariants/avoid items.
-15. Iterate with a single targeted change, then re-check.
-16. For preview-only work, render the image inline; the underlying file may remain at the default `$CODEX_HOME/generated_images/...` path.
-17. For project-bound work, move or copy the selected artifact into the workspace and update any consuming code or references. Never leave a project-referenced asset only at the default `$CODEX_HOME/generated_images/...` path.
-18. For batches, persist only the selected finals in the workspace unless the user explicitly asked to keep discarded variants.
-19. Always report the final saved path for any workspace-bound asset, plus the final prompt and whether the built-in tool or fallback CLI mode was used.
+13. Use the built-in `image_gen` tool by default.
+14. For repeated built-in generations, apply the sequential pacing rules: start one image, wait for it to return even if it takes several minutes, save and validate it, then continue.
+15. If the user explicitly chooses the CLI fallback, then and only then use the fallback-only docs for quality, `input_fidelity`, masks, output format, output paths, and network setup.
+16. Inspect outputs and validate: subject, style, composition, text accuracy, and invariants/avoid items.
+17. Iterate with a single targeted change, then re-check.
+18. For preview-only work, render the image inline; the underlying file may remain at the default `$CODEX_HOME/generated_images/...` path.
+19. For project-bound work, move or copy the selected artifact into the workspace and update any consuming code or references. Never leave a project-referenced asset only at the default `$CODEX_HOME/generated_images/...` path.
+20. For batches, persist only the selected finals in the workspace unless the user explicitly asked to keep discarded variants.
+21. Always report the final saved path for any workspace-bound asset, plus the final prompt and whether the built-in tool or fallback CLI mode was used.
 
 ## Comic and sequential art
 
